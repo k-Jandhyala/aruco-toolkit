@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArUco Marker Detection</title>
+    <link rel="stylesheet" href="style.css">
+    <script defer src="script.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>ArUco Marker ToolKit</h1>
+        <p class="subtitle">Use this toolkit to detect ArUco markers in images or from a webcam feed. You can also calibrate your camera and test the calibration to accsess the distance parameters of a AruCo marker</p>
+
+        <!-- Mode Tabs -->
+        <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 30px;">
+            <button id="uploadTab" class="mode-tab active" onclick="switchMode('upload')">Upload Image</button>
+            <button id="webcamTab" class="mode-tab" onclick="switchMode('webcam')">Use Webcam</button>
+            <button id="calibrationTab" class="mode-tab" onclick="switchMode('calibration')">Calibration</button>
+            <button id="testCalibrationTab" class="mode-tab" onclick="switchMode('testCalibration')">Test Calibration</button>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="upload-section" id="uploadSection">
+            <label for="fileInput" class="file-label">
+                Choose Image File
+            </label>
+            <input type="file" id="fileInput" accept="image/*">
+            <p style="margin-top: 15px; color: #666;">or drag and drop an image here</p>
+        </div>
+
+        <!-- Webcam Section -->
+        <div class="webcam-section" id="webcamSection" style="display: none;">
+            <div class="webcam-container">
+                <video id="webcamVideo" autoplay playsinline style="width: 100%; max-width: 640px; border-radius: 15px; background: #000; display: none;"></video>
+                <canvas id="webcamCanvas" style="display: none;"></canvas>
+                <div id="webcamPlaceholder" style="width: 100%; max-width: 640px; height: 480px; background: #f0f0f0; border-radius: 15px; display: flex; align-items: center; justify-content: center; color: #666; margin: 0 auto;">
+                    <p>Click "Start Webcam" to begin</p>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 20px;">
+                <button id="startWebcamBtn" class="webcam-button">Start Webcam</button>
+                <button id="stopWebcamBtn" class="webcam-button" style="display: none;">Stop Webcam</button>
+                <button id="captureBtn" class="webcam-button" style="display: none;">Capture & Detect</button>
+            </div>
+        </div>
+
+        <!-- Calibration Section -->
+        <div class="calibration-section" id="calibrationSection" style="display: none;">
+
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-bottom: 20px;">
+                <h3 style="margin-bottom: 15px; color: #333;">Calibration Pattern</h3>
+                <p style="margin-bottom: 15px; color: #666;">For your convinence, here is the most effective calibration pattern and the code has been optimized to detect it. <strong>Refrain from using other patterns as it may not work or may not be detected correctly.</strong></p>
+                <p style="margin-bottom: 15px; color: #666;">The best way to use the image is to print it out, stick it to a rigid, flat surface</p>
+                <button id="downloadCalibrationPatternBtn" class="webcam-button" onclick="downloadCalibrationPattern();">Download Calibration Pattern (PDF)</button>
+            </div>
+
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-bottom: 20px;">
+                <h3 style="margin-bottom: 15px;">Capture Calibration Images</h3>
+                <p style="margin-bottom: 15px; color: #666;">Use your webcam to capture at least 3 images of a calibration pattern(chessboard) from different angles.</p>
+                <p style="margin-bottom: 15px; color: #666;">Make sure to rotate the pattern to different angles to capture the best possible images. <strong>Ensure that the pattern is atleast 70% visible in the entire frame and that the edges of the pattern are visible.</strong></p>
+
+                <!-- Calibration Webcam Container -->
+                <div class="webcam-container" style="margin-bottom: 20px;">
+                    <video id="calibrationWebcamVideo" autoplay playsinline style="width: 100%; max-width: 640px; border-radius: 15px; background: #000; display: none;"></video>
+                    <canvas id="calibrationWebcamCanvas" style="display: none;"></canvas>
+                    <div id="calibrationWebcamPlaceholder" style="width: 100%; max-width: 640px; height: 480px; background: #f0f0f0; border-radius: 15px; display: flex; align-items: center; justify-content: center; color: #666; margin: 0 auto;">
+                        <p>Click "Start Webcam" to begin capturing calibration images</p>
+                    </div>
+                </div>
+                
+                <!-- Calibration Webcam Controls -->
+                <div style="text-align: center; margin-bottom: 15px;">
+                    <button id="startCalibrationWebcamBtn" class="webcam-button">Start Webcam</button>
+                    <button id="stopCalibrationWebcamBtn" class="webcam-button" style="display: none;">Stop Webcam</button>
+                    <button id="captureCalibrationBtn" class="webcam-button" style="display: none;">Capture Image</button>
+                </div>
+                
+                <p id="calibrationImageCount" style="margin-top: 10px; color: #666; text-align: center;">Images captured: 0</p>
+            </div>
+
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-bottom: 20px;">
+                <h3 style="margin-bottom: 15px; color: #333;">Calibration Status</h3>
+                <div id="calibrationStatus" style="padding: 10px; background: white; border-radius: 10px; margin-bottom: 15px;">
+                    <p>Loading status...</p>
+                </div>
+            </div>
+
+
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-bottom: 20px;">
+                <h3 style="margin-bottom: 15px; color: #333; display: none;">Calibration Settings</h3>
+                <div style="margin-bottom: 15px; display: none;">
+                    <label style="display: block; margin-bottom: 5px; color: #666;">Method:</label>
+                    <select id="calibrationMethod" class="dictionary-select" style="max-width: 300px;">
+                        <option value="aruco">ArUco Board</option>
+                        <option value="chessboard">Chessboard</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 15px; display: none;">
+                    <label style="display: block; margin-bottom: 5px; color: #666;">Square Size (meters):</label>
+                    <input type="number" id="squareSize" value="0.015" step="0.01" min="0.01" class="dictionary-select" style="max-width: 300px;">
+                </div>
+                <div style="margin-bottom: 15px; display: none;" id="markerSizeContainer">
+                    <label style="display: block; margin-bottom: 5px; color: #666;">Marker Size (meters):</label>
+                    <input type="number" id="markerSize" value="0.05" step="0.01" min="0.01" class="dictionary-select" style="max-width: 300px;">
+                </div>
+                <button id="calibrateBtn" class="detect-button" style="margin-top: 10px;">Perform Calibration</button>
+                <button id="clearCalibrationBtn" class="webcam-button" style="background: #ff6b6b; margin-top: 10px;">Clear Images</button>
+            </div>
+        </div>
+
+        <!-- Test Calibration Section -->
+        <div class="test-calibration-section" id="testCalibrationSection" style="display: none;">
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-bottom: 20px;">
+                <h3 style="margin-bottom: 15px; color: #333;">Upload Calibration Files</h3>
+                <p style="margin-bottom: 15px; color: #666;">Upload your camera calibration files (.pkl) to test distance measurement with ArUco markers.</p>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: #666;">Camera Matrix (.pkl):</label>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="file" id="cameraMatrixFile" accept=".pkl" style="flex: 1; max-width: 300px;">
+                        <button id="uploadCameraMatrixBtn" class="webcam-button" style="white-space: nowrap;">Upload</button>
+                    </div>
+                    <span id="cameraMatrixStatus" style="margin-top: 5px; display: block; color: #666;"></span>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: #666;">Distortion Coefficients (.pkl):</label>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="file" id="distCoeffsFile" accept=".pkl" style="flex: 1; max-width: 300px;">
+                        <button id="uploadDistCoeffsBtn" class="webcam-button" style="white-space: nowrap;">Upload</button>
+                    </div>
+                    <span id="distCoeffsStatus" style="margin-top: 5px; display: block; color: #666;"></span>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: #666;">Marker Size (meters):</label>
+                    <input type="number" id="testMarkerSize" value="0.05" step="0.01" min="0.01" class="dictionary-select" style="max-width: 300px;">
+                    <button id="saveMarkerSizeBtn" class="webcam-button" style="margin-left: 10px; white-space: nowrap;">Save</button>
+                    <span id="markerSizeStatus" style="margin-left: 10px; color: #666;"></span>
+                </div>
+                
+                <div id="calibrationUploadStatus" style="margin-top: 10px; color: #666;"></div>
+            </div>
+
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-bottom: 20px;">
+                <h3 style="margin-bottom: 15px; color: #333;">Live Distance Measurement</h3>
+                <p style="margin-bottom: 15px; color: #666;">Show an ArUco marker to the webcam to see real-time distance measurements.</p>
+                
+                <!-- Test Calibration Webcam Container -->
+                <div class="webcam-container" style="margin-bottom: 20px;">
+                    <video id="testCalibrationWebcamVideo" autoplay playsinline style="width: 100%; max-width: 640px; border-radius: 15px; background: #000; display: none;"></video>
+                    <canvas id="testCalibrationWebcamCanvas" style="display: none;"></canvas>
+                    <div id="testCalibrationWebcamPlaceholder" style="width: 100%; max-width: 640px; height: 480px; background: #f0f0f0; border-radius: 15px; display: flex; align-items: center; justify-content: center; color: #666; margin: 0 auto;">
+                        <p>Upload calibration files and start webcam to begin</p>
+                    </div>
+                </div>
+                
+                <!-- Test Calibration Webcam Controls -->
+                <div style="text-align: center; margin-bottom: 15px;">
+                    <button id="startTestCalibrationWebcamBtn" class="webcam-button" disabled>Start Webcam</button>
+                    <button id="stopTestCalibrationWebcamBtn" class="webcam-button" style="display: none;">Stop Webcam</button>
+                </div>
+                
+                <!-- Distance Display -->
+                <div id="distanceInfo" style="padding: 15px; background: white; border-radius: 10px; margin-top: 15px; display: none;">
+                    <h4 style="margin-bottom: 10px; color: #333;">Detected Markers:</h4>
+                    <div id="distanceDetails"></div>
+                </div>
+            </div>
+        </div>
+
+        <select id="dictionarySelect" class="dictionary-select">
+            <option value="DICT_4X4_50">DICT_4X4_50</option>
+            <option value="DICT_4X4_100">DICT_4X4_100</option>
+            <option value="DICT_4X4_250">DICT_4X4_250</option>
+            <option value="DICT_4X4_1000">DICT_4X4_1000</option>
+            <option value="DICT_5X5_50">DICT_5X5_50</option>
+            <option value="DICT_5X5_100">DICT_5X5_100</option>
+            <option value="DICT_5X5_250">DICT_5X5_250</option>
+            <option value="DICT_5X5_1000">DICT_5X5_1000</option>
+            <option value="DICT_6X6_50">DICT_6X6_50</option>
+            <option value="DICT_6X6_100">DICT_6X6_100</option>
+            <option value="DICT_6X6_250" selected>DICT_6X6_250</option>
+            <option value="DICT_6X6_1000">DICT_6X6_1000</option>
+            <option value="DICT_7X7_50">DICT_7X7_50</option>
+            <option value="DICT_7X7_100">DICT_7X7_100</option>
+            <option value="DICT_7X7_250">DICT_7X7_250</option>
+            <option value="DICT_7X7_1000">DICT_7X7_1000</option>
+        </select>
+
+        <button class="detect-button" id="detectButton" disabled>🔍 Detect Markers</button>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 10px; color: #666;">Processing image...</p>
+        </div>
+
+        <div class="error" id="error"></div>
+
+        <div class="results-section" id="resultsSection">
+            <div class="marker-info" id="markerInfo"></div>
+            <div class="result-image-container">
+                <img id="resultImage" class="result-image" alt="Detection result">
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+
