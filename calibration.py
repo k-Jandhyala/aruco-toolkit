@@ -327,16 +327,54 @@ class CameraCalibrator:
             with open(self.calibration_file, 'r') as f:
                 calibration_data = json.load(f)
             
-            self.camera_matrix = np.array(calibration_data["camera_matrix"])
-            self.dist_coeffs = np.array(calibration_data["dist_coeffs"])
+            camera_matrix = np.array(calibration_data.get("camera_matrix"))
+            dist_coeffs = np.array(calibration_data.get("dist_coeffs"))
+            
+            # Validate the loaded data before assigning
+            if not self._validate_calibration_data(camera_matrix, dist_coeffs):
+                print("Warning: Invalid calibration data found, ignoring it.")
+                return False
+            
+            self.camera_matrix = camera_matrix
+            self.dist_coeffs = dist_coeffs
             return True
         except Exception as e:
             print(f"Error loading calibration: {e}")
+            # Reset to None on error
+            self.camera_matrix = None
+            self.dist_coeffs = None
             return False
     
+    def _validate_calibration_data(self, camera_matrix: np.ndarray, dist_coeffs: np.ndarray) -> bool:
+        """Validate that calibration data is properly formatted and valid."""
+        if camera_matrix is None or dist_coeffs is None:
+            return False
+        
+        # Check camera matrix is 3x3
+        if camera_matrix.shape != (3, 3):
+            return False
+        
+        # Check that camera matrix values are reasonable (not all zeros)
+        if np.allclose(camera_matrix, 0):
+            return False
+        
+        # Check that focal length values are positive (diagonal elements)
+        if camera_matrix[0, 0] <= 0 or camera_matrix[1, 1] <= 0:
+            return False
+        
+        # Check dist_coeffs is a 1D array with at least 4 elements
+        if len(dist_coeffs.shape) != 1 or len(dist_coeffs) < 4:
+            return False
+        
+        return True
+    
     def is_calibrated(self) -> bool:
-        """Check if camera is calibrated."""
-        return self.camera_matrix is not None and self.dist_coeffs is not None
+        """Check if camera is calibrated with valid data."""
+        if self.camera_matrix is None or self.dist_coeffs is None:
+            return False
+        
+        # Validate the data is still valid
+        return self._validate_calibration_data(self.camera_matrix, self.dist_coeffs)
     
     def get_calibration_info(self) -> dict:
         """Get calibration information."""

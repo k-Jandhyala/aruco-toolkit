@@ -6,4 +6,6 @@ venv/
 *.pyd
 .Python
 calibration_output/
+calibration_data/
 *.pkl
+calibration.json
