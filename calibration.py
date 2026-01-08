@@ -137,7 +137,7 @@ class CameraCalibrator:
             
             # Save calibration
             self.camera_matrix = camera_matrix
-            self.dist_coeffs = dist_coeffs
+            self.dist_coeffs = self._normalize_dist_coeffs(dist_coeffs)
             self.save_calibration()
             
             return True, mean_error, f"Calibration successful! Mean reprojection error: {mean_error:.4f} pixels"
@@ -258,7 +258,7 @@ class CameraCalibrator:
             
             # Save calibration
             self.camera_matrix = camera_matrix
-            self.dist_coeffs = dist_coeffs
+            self.dist_coeffs = self._normalize_dist_coeffs(dist_coeffs)
             self.save_calibration()
             
             # Save pickle files if requested
@@ -305,9 +305,12 @@ class CameraCalibrator:
         if self.camera_matrix is None or self.dist_coeffs is None:
             return False
         
+        import datetime
         calibration_data = {
             "camera_matrix": self.camera_matrix.tolist(),
-            "dist_coeffs": self.dist_coeffs.tolist()
+            "dist_coeffs": self.dist_coeffs.tolist(),
+            "calibration_date": datetime.datetime.now().isoformat(),
+            "image_count": len(self.get_calibration_images())
         }
         
         try:
@@ -326,13 +329,29 @@ class CameraCalibrator:
         try:
             with open(self.calibration_file, 'r') as f:
                 calibration_data = json.load(f)
-            
-            camera_matrix = np.array(calibration_data.get("camera_matrix"))
-            dist_coeffs = np.array(calibration_data.get("dist_coeffs"))
-            
+            # Normalize incoming data to expected shapes
+            camera_matrix = np.array(calibration_data.get("camera_matrix"), dtype=float)
+            dist_coeffs = self._normalize_dist_coeffs(calibration_data.get("dist_coeffs"))
+
             # Validate the loaded data before assigning
             if not self._validate_calibration_data(camera_matrix, dist_coeffs):
                 print("Warning: Invalid calibration data found, ignoring it.")
+                return False
+            
+            # Additional check: if calibration file exists but no calibration images exist,
+            # consider it as not calibrated (stale/old calibration)
+            image_count = len(self.get_calibration_images())
+            saved_image_count = calibration_data.get("image_count", None)
+            
+            # If there are no images now, consider it stale calibration
+            # Old calibration files without metadata will be rejected if no images exist
+            if image_count == 0:
+                if saved_image_count is not None and saved_image_count > 0:
+                    print(f"Warning: Calibration file exists but no calibration images found. Saved count: {saved_image_count}, Current count: {image_count}")
+                else:
+                    print("Warning: Calibration file exists but no calibration images found. This appears to be a stale calibration.")
+                print("Clearing calibration data.")
+                self.clear_calibration_data()
                 return False
             
             self.camera_matrix = camera_matrix
@@ -345,6 +364,15 @@ class CameraCalibrator:
             self.dist_coeffs = None
             return False
     
+    def _normalize_dist_coeffs(self, dist_coeffs: Optional[np.ndarray]) -> Optional[np.ndarray]:
+        """Ensure distortion coefficients are 1D (OpenCV often returns (1, N))."""
+        if dist_coeffs is None:
+            return None
+        coeffs = np.array(dist_coeffs, dtype=float)
+        if coeffs.ndim == 2 and 1 in coeffs.shape:
+            coeffs = coeffs.flatten()
+        return coeffs
+
     def _validate_calibration_data(self, camera_matrix: np.ndarray, dist_coeffs: np.ndarray) -> bool:
         """Validate that calibration data is properly formatted and valid."""
         if camera_matrix is None or dist_coeffs is None:
@@ -362,8 +390,11 @@ class CameraCalibrator:
         if camera_matrix[0, 0] <= 0 or camera_matrix[1, 1] <= 0:
             return False
         
-        # Check dist_coeffs is a 1D array with at least 4 elements
-        if len(dist_coeffs.shape) != 1 or len(dist_coeffs) < 4:
+        # Normalize distortion coefficients and check shape
+        coeffs = self._normalize_dist_coeffs(dist_coeffs)
+        if coeffs is None:
+            return False
+        if coeffs.ndim != 1 or len(coeffs) < 4:
             return False
         
         return True
@@ -401,5 +432,24 @@ class CameraCalibrator:
             return True
         except Exception as e:
             print(f"Error clearing images: {e}")
+            return False
+    
+    def clear_calibration_data(self) -> bool:
+        """Clear all calibration data (images and calibration file)."""
+        try:
+            # Clear images
+            self.clear_calibration_images()
+            
+            # Clear calibration file
+            if self.calibration_file.exists():
+                self.calibration_file.unlink()
+            
+            # Reset in-memory data
+            self.camera_matrix = None
+            self.dist_coeffs = None
+            
+            return True
+        except Exception as e:
+            print(f"Error clearing calibration data: {e}")
             return False
 

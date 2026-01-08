@@ -320,6 +320,22 @@ async def clear_calibration_images():
         )
 
 
+@app.delete("/calibration/reset")
+async def reset_calibration():
+    """Clear all calibration data (images and calibration file)."""
+    success = calibrator.clear_calibration_data()
+    if success:
+        return JSONResponse(content={
+            "success": True,
+            "message": "All calibration data cleared"
+        })
+    else:
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to clear calibration data"}
+        )
+
+
 @app.post("/calibration/upload-single")
 async def upload_single_calibration_file(
     file: UploadFile = File(...),

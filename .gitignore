@@ -9,3 +9,4 @@ calibration_output/
 calibration_data/
 *.pkl
 calibration.json
+assets/calibration_output.zip

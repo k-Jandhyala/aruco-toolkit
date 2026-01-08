@@ -823,24 +823,62 @@ async function loadCalibrationStatus() {
     try {
         const response = await fetch('/calibration/status');
         const data = await response.json();
+        
+        console.log('Calibration status response:', data);
 
-        if (data.calibrated) {
-            calibrationStatus.innerHTML = `
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to fetch calibration status');
+        }
+
+        // Check if calibrated - data.calibrated is the main flag
+        if (data.calibrated === true) {
+            const calibInfo = data.calibration_info || {};
+            let statusHTML = `
                 <p style="color: green; font-weight: 600;">✅ Camera is calibrated</p>
-                <p style="margin-top: 5px; color: #666;">Focal Length: (${data.calibration_info.focal_length[0].toFixed(2)}, ${data.calibration_info.focal_length[1].toFixed(2)})</p>
-                <p style="color: #666;">Principal Point: (${data.calibration_info.principal_point[0].toFixed(2)}, ${data.calibration_info.principal_point[1].toFixed(2)})</p>
-
-                <button id="downloadCalibrationResultsBtn" class="webcam-button" onclick="downloadCalibrationResults();">Download Calibration Results(zip)</button>
             `;
+            
+            // Add calibration details if available
+            if (calibInfo.focal_length && Array.isArray(calibInfo.focal_length) && calibInfo.focal_length.length >= 2) {
+                statusHTML += `
+                    <p style="margin-top: 5px; color: #666;">Focal Length: (${calibInfo.focal_length[0].toFixed(2)}, ${calibInfo.focal_length[1].toFixed(2)})</p>
+                `;
+            }
+            
+            if (calibInfo.principal_point && Array.isArray(calibInfo.principal_point) && calibInfo.principal_point.length >= 2) {
+                statusHTML += `
+                    <p style="color: #666;">Principal Point: (${calibInfo.principal_point[0].toFixed(2)}, ${calibInfo.principal_point[1].toFixed(2)})</p>
+                `;
+            }
+            
+            statusHTML += `
+                <button id="downloadCalibrationResultsBtn" class="webcam-button" style="margin-top: 10px;">Download Calibration Results (zip)</button>
+            `;
+            
+            calibrationStatus.innerHTML = statusHTML;
+            
+            // Attach event listener to the download button
+            const downloadBtn = document.getElementById('downloadCalibrationResultsBtn');
+            if (downloadBtn) {
+                // Remove any existing listeners first
+                const newBtn = downloadBtn.cloneNode(true);
+                downloadBtn.parentNode.replaceChild(newBtn, downloadBtn);
+                newBtn.addEventListener('click', downloadCalibrationResults);
+            } else {
+                console.error('Download button not found after creating status HTML');
+            }
         } else {
             calibrationStatus.innerHTML = `
                 <p style="color: #ffa726; font-weight: 600;">⚠️ Camera not calibrated</p>
                 <p style="margin-top: 5px; color: #666;">Capture at least 3 calibration images to begin calibration.</p>
             `;
         }
-        calibrationImageCount.textContent = `Images captured: ${data.image_count}`;
+        
+        if (data.image_count !== undefined) {
+            calibrationImageCount.textContent = `Images captured: ${data.image_count}`;
+        }
     } catch (err) {
-        calibrationStatus.innerHTML = `<p style="color: red;">Error loading calibration status</p>`;
+        console.error('Error loading calibration status:', err);
+        calibrationStatus.innerHTML = `<p style="color: red;">Error loading calibration status: ${err.message}</p>`;
     }
 }
 
@@ -872,9 +910,13 @@ calibrateBtn.addEventListener('click', async () => {
 
         if (response.ok && data.success) {
             showError(`✅ ${data.message}`, 'success');
+            // Wait a moment for file system operations to complete
+            await new Promise(resolve => setTimeout(resolve, 500));
             await loadCalibrationStatus();
         } else {
             showError(data.error || 'Calibration failed');
+            // Still refresh status to show current state
+            await loadCalibrationStatus();
         }
     } catch (err) {
         showError('Error during calibration: ' + err.message);
@@ -912,26 +954,36 @@ function downloadCalibrationPattern() {
     window.open('/assets/CameraCalibMatrix.pdf', '_blank');
 }
 
+// Make function globally accessible
 async function downloadCalibrationResults() {
-    const response = await fetch("/assets/calibration_output.zip");
-    
-    // ensure response ok
-    if (!response.ok) {
-        alert("Download failed");
-        return;
+    try {
+        const response = await fetch("/assets/calibration_output.zip");
+        
+        // ensure response ok
+        if (!response.ok) {
+            alert(`Download failed: ${response.status} ${response.statusText}. The calibration output may not have been created yet.`);
+            console.error('Download failed:', response.status, response.statusText);
+            return;
+        }
+        
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "calibration_output.zip";
+        document.body.appendChild(link);
+        link.click();
+        
+        // cleanup
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        alert(`Error downloading calibration results: ${err.message}`);
+        console.error('Error downloading calibration results:', err);
     }
-    
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "calibration_output.zip";
-    document.body.appendChild(link);
-    link.click();
-    
-    // cleanup
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
 }
+
+// Make it globally accessible for onclick handlers
+window.downloadCalibrationResults = downloadCalibrationResults;
     
